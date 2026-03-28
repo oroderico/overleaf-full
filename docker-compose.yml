@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: >
+        mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - overleaf-net
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    networks:
+      - overleaf-net
+
+  overleaf:
+    image: overleaf-full:latest
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8085:80"
+    environment:
+      OVERLEAF_APP_NAME: "Overleaf Local"
+      OVERLEAF_MONGO_URL: "mongodb://mongo:27017/overleaf?replicaSet=rs0"
+      OVERLEAF_REDIS_HOST: "redis"
+    volumes:
+      - overleaf_data:/var/lib/overleaf
+    networks:
+      - overleaf-net
+
+volumes:
+  mongo_data:
+  overleaf_data:
+
+networks:
+  overleaf-net:
